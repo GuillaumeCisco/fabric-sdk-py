@@ -13,7 +13,7 @@ services:
     image: hyperledger/fabric-peer:${HLF_VERSION}
     environment:
       - GODEBUG=netdns=go+1
-      - FABRIC_LOGGING_SPEC=debug
+      - FABRIC_LOGGING_SPEC=info
      #- CORE_PEER_ID=peer0
       - CORE_PEER_ADDRESSAUTODETECT=false
       - CORE_LOGGING_LEVEL=DEBUG

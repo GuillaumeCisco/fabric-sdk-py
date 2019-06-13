@@ -45,7 +45,6 @@ class ChaincodeRegistration(object):
         self.pattern = pattern
         self.er = er
 
-
 class ChannelEventHub(object):
     """A class represents channel event hub."""
 
@@ -80,11 +79,11 @@ class ChannelEventHub(object):
         self._connected = connected
 
     def _get_stream(self, start=None, stop=None, filtered=True,
-                    behavior='BLOCK_UNTIL_READY'):
+                   behavior='BLOCK_UNTIL_READY'):
         """ get the events of the channel.
         Return: the events in success or None in fail.
         """
-        _logger.info("get events")
+        _logger.info("create peer delivery stream")
 
         seek_info = create_seek_info(start, stop, behavior)
 
@@ -207,19 +206,30 @@ class ChannelEventHub(object):
 
     def handle_filtered_chaincode(self, block, cr):
         for ft in block['filtered_transactions']:
+
+            if ft['tx_validation_code'] != 'VALID':
+                raise Exception(ft['tx_validation_code'])
+
             if 'transaction_actions' in ft:
                 block_events = ft['transaction_actions']
                 self._callChaincodeListener(cr, block_events, block)
 
     def handle_full_chaincode(self, block, cr):
+        txStatusCodes = block['metadata']['metadata'][
+            BlockMetadataIndex.Value('TRANSACTIONS_FILTER')]
+
         if 'data' in block:
-            for env in block['data']['data']:
-                payload = env['payload']
+            for index, data in enumerate(block['data']['data']):
+                payload = data['payload']
                 channel_header = payload['header']['channel_header']
 
                 # only  ENDORSER_TRANSACTION have chaincode  events
                 if channel_header['type'] == 3:
                     tx = payload['data']
+
+                    if txStatusCodes and txStatusCodes[index] != TxValidationCode.Value('VALID'):
+                        raise Exception(
+                            TxValidationCode.Name(txStatusCodes[index]))
 
                     if 'actions' in tx:
                         for t in tx['actions']:

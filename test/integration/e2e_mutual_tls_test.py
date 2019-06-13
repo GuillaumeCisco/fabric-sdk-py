@@ -9,6 +9,8 @@ import docker
 import logging
 import unittest
 
+from hfc.fabric.channel.channel import SYSTEM_CHANNEL_NAME
+
 from hfc.fabric.client import Client
 from test.integration.config import E2E_CONFIG
 from test.integration.utils import BaseTestCase
@@ -89,11 +91,13 @@ class E2eTest(BaseTestCase):
         orgs = ["org1.example.com", "org2.example.com"]
         for org in orgs:
             org_admin = self.client.get_user(org, 'Admin')
+            orderer_admin = self.client.get_user('orderer.example.com', 'Admin')
             response = await self.client.channel_join(
                 requestor=org_admin,
                 channel_name=self.channel_name,
                 peers=['peer0.' + org, 'peer1.' + org],
-                orderer='orderer.example.com'
+                orderer='orderer.example.com',
+                orderer_admin=orderer_admin
             )
             self.assertTrue(response)
             # Verify the ledger exists now in the peer node
@@ -185,6 +189,7 @@ class E2eTest(BaseTestCase):
                 peers=['peer1.' + org],
                 args=args,
                 cc_name=CC_NAME,
+                cc_version=CC_VERSION,
                 wait_for_event=True,
                 cc_pattern="^invoked*"  # for chaincode event
             )
@@ -209,7 +214,8 @@ class E2eTest(BaseTestCase):
                 channel_name=self.channel_name,
                 peers=['peer0.' + org],
                 args=args,
-                cc_name=CC_NAME
+                cc_name=CC_NAME,
+                cc_version=CC_VERSION
             )
             self.assertEqual(response, '400')  # 300 + 100
 
@@ -473,10 +479,31 @@ class E2eTest(BaseTestCase):
                 channel_name=self.channel_name,
                 peers=['peer0.' + org, 'peer1.' + org]
             )
-            self.assertEqual(response.config.sequence,
+            self.assertEqual(response[0].config.sequence,
                              1, "Get Config Failed")
 
         logger.info("E2E: Query installed chaincode done")
+
+    async def get_channel_config_with_orderer(self, channel_name=SYSTEM_CHANNEL_NAME):
+        """
+        Test get channel config on peer
+
+        :return:
+        """
+        logger.info(f"E2E: Get channel {channel_name} config start")
+
+        orgs = ["orderer.example.com"]
+        for org in orgs:
+            org_admin = self.client.get_user(org, "Admin")
+            response = await self.client.get_channel_config_with_orderer(
+                orderer='orderer.example.com',
+                requestor=org_admin,
+                channel_name=channel_name,
+            )
+            self.assertEqual(response['config']['sequence'],
+                             '0', "Get Config Failed")
+
+        logger.info(f"E2E: Get channel {channel_name} config done")
 
     def onFilteredEvent(self, block):
         self.filtered_blocks.append(block)
@@ -563,9 +590,15 @@ class E2eTest(BaseTestCase):
 
         logger.info("\n\nE2E testing started...")
 
+        self.client.new_channel(SYSTEM_CHANNEL_NAME)
+
+        loop.run_until_complete(self.get_channel_config_with_orderer())
+
         loop.run_until_complete(self.channel_create())
 
         loop.run_until_complete(self.channel_join())
+
+        loop.run_until_complete(self.get_channel_config())
 
         loop.run_until_complete(self.chaincode_install())
 
@@ -592,8 +625,6 @@ class E2eTest(BaseTestCase):
         loop.run_until_complete(self.query_block())
 
         loop.run_until_complete(self.query_transaction())
-
-        loop.run_until_complete(self.get_channel_config())
 
         loop.run_until_complete(self.get_filtered_block_events())
 

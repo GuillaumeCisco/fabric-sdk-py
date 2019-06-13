@@ -20,6 +20,10 @@ services:
       service: orderer-base
     container_name: orderer.example.com
     hostname: orderer.example.com
+    environment:
+      - ORDERER_GENERAL_TLS_CLIENTAUTHREQUIRED=true
+      - ORDERER_GENERAL_TLS_ROOTCAS=/var/hyperledger/orderer/tls/ca.crt
+      - ORDERER_GENERAL_TLS_CLIENTROOTCAS=/var/hyperledger/orderer/tls/ca.crt
     ports:
       - "7050:7050"
     volumes:
