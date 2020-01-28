@@ -84,7 +84,38 @@ def build_header(creator, channel_header, nonce):
     return header
 
 
-def build_channel_header(type, tx_id, channel_id,
+def build_channel_header(type, channel_id, tx_id, epoch, chaincode_id,
+                          timestamp, client_cert_hash):
+    """Build channel header.
+    Returns: common_proto.Header instance
+
+    """
+    channel_header = common_pb2.ChannelHeader()
+    channel_header.type = type
+    channel_header.version = 1
+
+
+    channel_header.channel_id = proto_str(channel_id)
+    channel_header.tx_id = proto_str(tx_id)
+    channel_header.epoch = epoch
+
+    if chaincode_id:
+        chaincodeID = chaincode_pb2.chaincodeID()  # TODO build protos
+        chaincodeID.name = chaincode_id
+
+        headerExt = proposal_pb2.ChaincodeHeaderExtension()
+        headerExt.chaincodeID = chaincodeID
+
+        channel_header.extension = headerExt.SerializeToString() # TODO maybe is CopyFrom or extend
+
+    channel_header.timestamp = timestamp
+
+    if client_cert_hash:
+        channel_header.tls_cert_hash = client_cert_hash
+
+    return channel_header
+
+def old_build_channel_header(type, tx_id, channel_id,
                          timestamp, epoch=0, extension=None,
                          tls_cert_hash=None):
     """Build channel header.
@@ -196,6 +227,33 @@ def extract_channel_config(configtx_proto_envelope):
     return configtx.config_update
 
 
+def build_proposal(invokeSpec, header, transient_map=None):
+    """ Create an chaincode transaction proposal
+
+    Args:
+        transient_map: transient data map
+        cci_spec: The spec
+        header: header of the proposal
+
+    Returns: The created proposal
+
+    """
+    cci_spec = chaincode_pb2.ChaincodeInvocationSpec()
+    cci_spec.chaincode_spec.CopyFrom(invokeSpec)
+
+    cc_payload = proposal_pb2.ChaincodeProposalPayload()
+    cc_payload.input = cci_spec.SerializeToString()
+
+    if transient_map:
+        for name, bytes_value in transient_map.items():
+            cc_payload.TransientMap[name] = bytes_value
+
+    proposal = proposal_pb2.Proposal()
+    proposal.header = header.SerializeToString()
+    proposal.payload = cc_payload.SerializeToString()
+
+    return proposal
+
 def build_cc_proposal(cci_spec, header, transient_map):
     """ Create an chaincode transaction proposal
 
@@ -220,17 +278,17 @@ def build_cc_proposal(cci_spec, header, transient_map):
     return proposal
 
 
-def sign_proposal(tx_context, proposal):
+def sign_proposal(signingIdentity, proposal):
     """ Sign a proposal
     Args:
-        tx_context: transaction context
+        signingIdentity: signing Identity
         proposal: proposal to sign on
 
     Returns: Signed proposal
 
     """
     proposal_bytes = proposal.SerializeToString()
-    sig = tx_context.sign(proposal_bytes)
+    sig = signingIdentity.sign(proposal_bytes)
 
     signed_proposal = proposal_pb2.SignedProposal()
     signed_proposal.signature = sig
@@ -239,25 +297,45 @@ def sign_proposal(tx_context, proposal):
     return signed_proposal
 
 
-def send_transaction_proposal(proposal, tx_context, peers):
+def send_peers_proposal(peers, proposal, timeout):
     """Send transaction proposal
 
     Args:
-        header: header
-        tx_context: transaction context
-        proposal: transaction proposal
         peers: peers
+        proposal: transaction proposal
+        timeout: timeout
 
     Returns: a list containing all the proposal response
 
     """
-    signed_proposal = sign_proposal(tx_context, proposal)
+    targets = peers
+    if not isinstance(peers, list):
+        targets = [peers]
 
-    send_executions = [peer.send_proposal(signed_proposal)
-                       for peer in peers]
+    send_executions = [peer.send_proposal(proposal) for peer in targets]
 
     return send_executions
 
+def checkProposalRequest(request, all):
+    errorMsg = None
+    if request:
+        if 'chaincodeId' not in request and not request['chaincodeId']:
+            errorMsg = 'Missing "chaincodeId" parameter in the proposal request'
+        elif 'txId' not in request and not request['txId'] and all:
+            errorMsg = 'Missing "txId" parameter in the proposal request'
+    else:
+        errorMsg = 'Missing input request object on the proposal request'
+    return errorMsg
+
+
+def checkInstallRequest(request):
+    errorMsg = None
+    if request:
+        if 'chaincodeVersion' not in request and not request['chaincodeVersion']:
+            errorMsg = 'Missing "chaincodeVersion" parameter in the proposal request'
+    else:
+        errorMsg = 'Missing input request object on the proposal request'
+    return errorMsg
 
 def send_transaction(orderers, tran_req, tx_context):
     """Send a transaction to the chain's orderer service (one or more

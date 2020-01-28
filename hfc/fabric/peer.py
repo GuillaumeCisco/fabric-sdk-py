@@ -56,7 +56,7 @@ class Peer(object):
         self._discovery_client = protocol_pb2_grpc.DiscoveryStub(self._channel)
         self._event_client = events_pb2_grpc.DeliverStub(self._channel)
 
-    def send_proposal(self, proposal):
+    def send_proposal(self, proposal, timeout=None):
         """ Send an endorsement proposal to endorser
 
         Args:
@@ -68,7 +68,7 @@ class Peer(object):
         _logger.debug("Send proposal={}".format(proposal))
         return self._endorser_client.ProcessProposal(proposal)
 
-    def send_discovery(self, request):
+    def send_discovery(self, request, timeout=None):
         """Send an request to discovery server
 
         Args:

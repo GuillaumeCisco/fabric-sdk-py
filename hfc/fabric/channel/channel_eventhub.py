@@ -58,10 +58,10 @@ class ChaincodeRegistration(object):
 class ChannelEventHub(object):
     """A class represents channel event hub."""
 
-    def __init__(self, peer, channel_name, requestor):
+    def __init__(self, channel, peer, requestor=None): # TODO find a way to remove requestor
         self._peer = peer
         self._requestor = requestor
-        self._channel_name = channel_name
+        self._channel_name = channel.name
 
         self.stream = None
         self._start = None

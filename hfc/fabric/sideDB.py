@@ -1,0 +1,34 @@
+import logging
+
+from hfc.fabric.policy import Policy
+from hfc.protos.common import collection_pb2
+
+_logger = logging.getLogger(__name__)
+_logger.setLevel(logging.DEBUG)
+
+
+class CollectionConfig(object):
+
+    @staticmethod
+    def buildCollectionConfigPackage(collectionsConfigs):
+        collections_configs = []
+        for config in collectionsConfigs:
+            static_config = collection_pb2.StaticCollectionConfig()
+            static_config.name = config['name']
+            static_config.member_orgs_policy.signature_policy.CopyFrom(Policy._build_policy(config['policy'], returnProto=True))
+            static_config.maximum_peer_count = config['maxPeerCount']
+            static_config.required_peer_count = config.get('requiredPeerCount', 0)
+            static_config.block_to_live = config.get('blockToLive', 0)
+            static_config.member_only_read = config.get('memberOnlyRead',  False)
+
+            collections_config = collection_pb2.CollectionConfig()
+            collections_config.static_collection_config.CopyFrom(
+                static_config
+            )
+
+            collections_configs.append(collections_config)
+
+        cc_coll_cfg = collection_pb2.CollectionConfigPackage()
+        cc_coll_cfg.config.extend(collections_configs)
+
+        return cc_coll_cfg
