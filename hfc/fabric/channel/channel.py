@@ -9,7 +9,7 @@ from datetime import datetime
 
 from hfc.fabric.block_decoder import BlockDecoder, decode_identity, decode_config_update, \
     decode_header, decode_proposal_response_payload, decode_chaincode_proposal_payload, decode_chaincode_action, \
-    decode_config_envelope #, decode_collections_config
+    decode_config_envelope, to_PEM_certs, decode_collections_config
 from hfc.fabric.transaction.tx_proposal_request import CC_TYPE_GOLANG, CC_INVOKE
 from hfc.protos.common import common_pb2, configtx_pb2, ledger_pb2
 from hfc.protos.orderer import ab_pb2
@@ -18,8 +18,9 @@ from hfc.protos.discovery import protocol_pb2
 from hfc.protos.utils import create_cc_spec, create_seek_info, create_envelope
 from hfc.util.utils import proto_str, current_timestamp, proto_b, \
     build_header, build_channel_header, \
-    pem_to_der, build_proposal, sign_proposal, send_peers_proposal, \
+    build_proposal, sign_proposal, send_peers_proposal, \
     checkProposalRequest, checkInstallRequest
+from ..msp.identity import Identity
 from ..msp.mspManager import MSPManager
 from .channel_eventhub import ChannelEventHub
 from ..orderer import Orderer
@@ -36,13 +37,6 @@ _logger.setLevel(logging.DEBUG)
 
 
 channel_count = 1
-
-# TODO, rework
-class DuplicatePeer(Exception):
-    pass
-
-class DuplicateOrderer(Exception):
-    pass
 
 
 class Channel(object):
@@ -61,11 +55,11 @@ class Channel(object):
         """
         pat = "^[a-z][a-z0-9.-]*$"  # matching patter for regex checker
         if not re.match(pat, name):
-            raise ValueError(f'Failed to create Channel. channel name should'
+            raise Exception(f'Failed to create Channel. channel name should'
                              f' match Regex {pat}, but got {name}')
 
         if not clientContext:
-            raise ValueError('Failed to create Channel. Missing requirement "clientContext" parameter.')
+            raise Exception('Failed to create Channel. Missing requirement "clientContext" parameter.')
 
         self._name = name
         self._channel_peers = {}
@@ -128,20 +122,20 @@ class Channel(object):
                         _logger.debug(f'{method} - user requested discover {use_discovery}')
                         self._use_discovery = use_discovery
                     else:
-                        raise ValueError('Request parameter "discover" or config parameter "initialize-with-discovery"'
+                        raise Exception('Request parameter "discover" or config parameter "initialize-with-discovery"'
                                          ' must be boolean')
                 if as_localhost:
                     if isinstance(as_localhost, bool):
                         _logger.debug(f'{method} - user requested discovery as localhost {as_localhost}')
                         self._as_localhost = as_localhost
                     else:
-                        raise ValueError('Request parameter "asLocalhost" or config parameter "discovery-as-localhost"'
+                        raise Exception('Request parameter "asLocalhost" or config parameter "discovery-as-localhost"'
                                          ' must be boolean')
                 if cache_life_time:
                     if isinstance(cache_life_time, int):
                         self._discovery_cache_life = cache_life_time
                     else:
-                        raise ValueError('Config parameter "discovery-cache-life" must be number')
+                        raise Exception('Config parameter "discovery-cache-life" must be number')
 
                 if request['endorsementHandler']:
                     _logger.debug(f"{method} - user requested endorsementHandler {request['endorsementHandler']}")
@@ -199,7 +193,7 @@ class Channel(object):
                     if discovery_results['msps']:
                         self._buildDiscoveryMSPs(discovery_results)
                     else:
-                        raise ValueError('No MSP information found')
+                        raise Exception('No MSP information found')
 
                     if discovery_results['orderers']:
                         self._buildDiscoveryOrderers(discovery_results, discovery_results['msps'], discover_request)
@@ -260,7 +254,7 @@ class Channel(object):
         if final_error:
             raise Exception(final_error)
         else:
-            raise ValueError('Initialization failed to complete')
+            raise Exception('Initialization failed to complete')
 
     def _buildDiscoveryMSPs(self, discovery_results):
         method = '_buildDiscoveryMSPs'
@@ -357,7 +351,7 @@ class Channel(object):
         else:
             _logger.debug('No discovery results to return')
             # not working with discovery or we have not been initialized
-            raise ValueError('This Channel has not been initialized or not initialized with discovery support')
+            raise Exception('This Channel has not been initialized or not initialized with discovery support')
 
     async def getEndorsementPlan(self, endorsement_hint):
         method = 'getEndorsementPlan'
@@ -418,7 +412,7 @@ class Channel(object):
             else:
                 msg = f'Peer {name} already exists'
                 _logger.error(msg)
-                raise DuplicatePeer(msg)
+                raise Exception(msg)
 
         _logger.debug(f'adding a new peer  --name: {name} --URL: {peer.url}')
 
@@ -432,7 +426,7 @@ class Channel(object):
         channel_peer = self._channel_peers[name]
 
         if not channel_peer:
-            raise ValueError(f'Peer with name "{name}" not assigned to this channel')
+            raise Exception(f'Peer with name "{name}" not assigned to this channel')
 
         return channel_peer
 
@@ -456,7 +450,7 @@ class Channel(object):
             else:
                 msg = f'Peer {name} already exists'
                 _logger.error(msg)
-                raise DuplicateOrderer(msg)
+                raise Exception(msg)
 
         self._orderers[name] = orderer
 
@@ -467,7 +461,7 @@ class Channel(object):
         orderer = self._orderers[name]
 
         if not orderer:
-            raise ValueError(f'Orderer with name "{name}" not assigned to this channel')
+            raise Exception(f'Orderer with name "{name}" not assigned to this channel')
 
         return orderer
 
@@ -485,11 +479,11 @@ class Channel(object):
 
     def getChannelEventHub(self, name):
         if not isinstance(name, str):
-            raise ValueError('"name" parameter must be a Peer name.')
+            raise Exception('"name" parameter must be a Peer name.')
 
         _channel_peer = self._channel_peers[name]
         if not _channel_peer:
-            raise ValueError(f'Peer with name "{name}" not assigned to this channel')
+            raise Exception(f'Peer with name "{name}" not assigned to this channel')
 
         return _channel_peer.getChannelEventHub()
 
@@ -686,7 +680,7 @@ class Channel(object):
                     _logger.debug(f'{method} - completed processing results')
 
             if error_msg:
-                raise ValueError(f'Channel {self._name} Discovery error: {error_msg}')
+                raise Exception(f'Channel {self._name} Discovery error: {error_msg}')
             else:
                 return results
         else:
@@ -695,7 +689,7 @@ class Channel(object):
                 _logger.error(f'Unable to get discovery results from peer {target_peer.url}')
                 target_peer.close()
  
-            raise ValueError('Discovery has failed to return results')
+            raise Exception('Discovery has failed to return results')
 
     def _processDiscoveryChaincodeResults(self, q_chaincodes):
         method = '_processDiscoveryChaincodeResults'
@@ -737,7 +731,7 @@ class Channel(object):
         config = {}
         if q_config:
             try:
-                if q_config['msps']:
+                if q_config['msps']: # TODO review look a lot like decode_fabric_MSP_config
                     config['msps'] = {}
                     for id in q_config['msps']:
                         _logger.debug(f'{method} - found organization {id}')
@@ -745,14 +739,14 @@ class Channel(object):
                         msp_config = {
                             'id': id,
                             'orgs': q_msp['organizational_unit_identifiers'],
-                            'rootCerts': byteToNormalizedPEM(q_msp['root_certs']), # TODO
-                            'intermediateCerts': byteToNormalizedPEM(q_msp['intermediate_certs']), # TODO
-                            'admins': byteToNormalizedPEM(q_msp['admins']),  # TODO
-                            'tls_root_certs': byteToNormalizedPEM(q_msp['tls_root_certs']),  # TODO
-                            'tls_intermediate_certs': byteToNormalizedPEM(q_msp['tls_intermediate_certs'])  # TODO
+                            'rootCerts': to_PEM_certs(q_msp['root_certs']),
+                            'intermediateCerts': to_PEM_certs(q_msp['intermediate_certs']),
+                            'admins': to_PEM_certs(q_msp['admins']),
+                            'tls_root_certs': to_PEM_certs(q_msp['tls_root_certs']),
+                            'tls_intermediate_certs': to_PEM_certs(q_msp['tls_intermediate_certs'])
                         }
                         config['msps'] = msp_config
-                if q_config['orderers']:
+                if q_config['orderers']: # TODO review looks a lot like decode_fabric_endpoints
                     config['orderers'] = {}
                     for mspid in q_config['orderers']:
                         _logger.debug(f'{method} - found orderer org {mspid}')
@@ -846,7 +840,7 @@ class Channel(object):
                 found = Orderer(url, self._buildOptions(name, url, host, msps[msp_id]))
                 self.addOrderer(found, True)
             else:
-                raise ValueError('No TLS cert information available')
+                raise Exception('No TLS cert information available')
 
         return found.name
 
@@ -871,7 +865,7 @@ class Channel(object):
                 found = Peer(url, self._buildOptions(name, url, host_port[0], msps[msp_id]))
                 self.addPeer(found, msp_id, None, None)
         else:
-            raise ValueError('No TLS cert information available')
+            raise Exception('No TLS cert information available')
 
         return found.name
 
@@ -1574,7 +1568,7 @@ class Channel(object):
             return Channel.send_transaction_proposal(request, self._name, self._clientContext, timeout)
 
     @staticmethod
-    async def send_transaction_proposal(request, channelId, client_context, timeout):
+    async def send_transaction_proposal(request, channelId, client_context, timeout=None):
         method = 'send_transaction_proposal'
         _logger.debug(f'{method} - start')
 
@@ -1778,7 +1772,7 @@ class Channel(object):
 
         proposalResponse = proposalResponses[0]
 
-        proposal = ChannelHelper.buildTransactionProposal( # TODO
+        proposal = self._buildTransactionProposal(
             chaincodeProposal,
             endorsments,
             proposalResponse
@@ -1801,7 +1795,7 @@ class Channel(object):
             return orderer.sendBroadcast(signed_envelope, timeout)
 
     @staticmethod
-    def buildEnvelope(clientContext, chaincodeProposal, endorsements, proposalResponse, use_admin_signer):
+    def _buildTransactionProposal(chaincodeProposal, endorsements, proposalResponse):
         header = decode_header(chaincodeProposal.header)
 
         # TODO review
@@ -1823,18 +1817,24 @@ class Channel(object):
         chaincodeProposalPayloadNoTrans.chaincode_proposal_payload = chaincodeProposalPayloadNoTrans.SerializeToString()
 
         transactionAction = transaction_pb2.TransactionAction()
-        transactionAction.header.CopyFrom(header.getSignatureHeader())
+        transactionAction.header.CopyFrom(header.signature_header)
         transactionAction.payload = chaincodeActionPayload.SerializeToString()
 
         actions = []
         actions.append(transactionAction)
 
         transaction = transaction_pb2.Transaction()
-        transaction.actions.extend(actions) # TODO review
+        transaction.actions.extend(actions)  # TODO review
 
         payload = common_pb2.Payload()
         payload.header.CopyFrom(header)
         payload.data = transaction.SerializeToString()
+
+        return payload
+
+    @staticmethod
+    def buildEnvelope(clientContext, chaincodeProposal, endorsements, proposalResponse, use_admin_signer):
+        payload = Channel._buildTransactionProposal(chaincodeProposal, endorsements, proposalResponse)
 
         signer = clientContext._getSigningIdentity(use_admin_signer)
         signed_proposal = sign_proposal(signer, payload)

@@ -29,7 +29,7 @@ _logger = logging.getLogger(__name__ + ".user")
 class User(object):
     """ The default implementation of user. """
 
-    def __init__(self, name, org, state_store):
+    def __init__(self, name, org=None, state_store=None):
         """Constructor for a user.
 
         Args:

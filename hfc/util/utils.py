@@ -84,8 +84,7 @@ def build_header(creator, channel_header, nonce):
     return header
 
 
-def build_channel_header(type, channel_id, tx_id, epoch, chaincode_id,
-                          timestamp, client_cert_hash):
+def build_channel_header(type, channel_id, tx_id, epoch=None, chaincode_id=None, timestamp=None, client_cert_hash=None):
     """Build channel header.
     Returns: common_proto.Header instance
 
@@ -94,10 +93,14 @@ def build_channel_header(type, channel_id, tx_id, epoch, chaincode_id,
     channel_header.type = type
     channel_header.version = 1
 
+    if timestamp is None:
+        timestamp = current_timestamp()
 
     channel_header.channel_id = proto_str(channel_id)
     channel_header.tx_id = proto_str(tx_id)
-    channel_header.epoch = epoch
+
+    if epoch:
+        channel_header.epoch = epoch
 
     if chaincode_id:
         chaincodeID = chaincode_pb2.chaincodeID()  # TODO build protos

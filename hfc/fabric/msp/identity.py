@@ -8,7 +8,7 @@ _logger.setLevel(logging.DEBUG)
 
 class Identity(object):
 
-    def __init__(self, certificate, publicKey, mspId, cryptoSuite):
+    def __init__(self, certificate, publicKey, mspId, cryptoSuite=None):
 
         if not certificate:
             raise Exception('Missing required parameter "certificate".')

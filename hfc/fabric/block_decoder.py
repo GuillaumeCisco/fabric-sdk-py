@@ -33,7 +33,7 @@ from hfc.protos.msp import msp_config_pb2
 from hfc.protos.msp import identities_pb2
 
 # Import required Common Protos
-from hfc.protos.common import common_pb2
+from hfc.protos.common import common_pb2, collection_pb2
 from hfc.protos.common import configtx_pb2
 from hfc.protos.common import policies_pb2
 from hfc.protos.common import configuration_pb2 as common_configuration_pb2
@@ -1432,3 +1432,46 @@ def decode_fabric_endpoints(endpoints):
 
         endpoints_info.append(endpoint)
     return endpoints_info
+
+
+def decode_collection_policy_config(proto_coll_policy):
+    payload = {}
+    proto_coll_policy_cfg = collection_pb2.CollectionPolicyConfig()
+    proto_coll_policy_cfg.ParseFromString(proto_coll_policy)
+
+    payload['signature_policy'] = decode_signature_policy(proto_coll_policy_cfg)
+
+    return payload
+
+
+def decode_config_payload(payload_bytes):
+    payload = {}
+    proto_static_coll_cfg = collection_pb2.StaticCollectionConfig()
+    proto_static_coll_cfg.ParseFromString(payload_bytes)
+
+    # TODO maybe use HasField for checking
+
+    payload['name'] = proto_static_coll_cfg.name
+    payload['member_orgs_policy'] = decode_collection_policy_config(proto_static_coll_cfg.member_orgs_policy)
+    payload['required_peer_count'] = proto_static_coll_cfg.required_peer_count
+    payload['maximum_peer_count'] = proto_static_coll_cfg.maximum_peer_count
+    payload['block_to_live'] = proto_static_coll_cfg.block_to_live
+    payload['member_only_read'] = proto_static_coll_cfg.member_only_read
+
+    return payload
+
+# TODO review with real values
+def decode_collections_config(config_bytes):
+
+    data = {}
+
+    if config_bytes:
+        cc_coll_cfg = collection_pb2.CollectionConfigPackage()
+        cc_coll_cfg.ParseFromString(config_bytes)
+        data['config'] = []
+        if cc_coll_cfg and cc_coll_cfg.config:
+            for cfg in cc_coll_cfg.config:
+                config = {'static_collection_config': decode_config_payload(cfg.payload)}
+                data['config'].append(config)
+
+    return data

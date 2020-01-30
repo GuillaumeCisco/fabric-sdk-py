@@ -5,6 +5,7 @@ from hfc.fabric.user import User
 _logger = logging.getLogger(__name__)
 _logger.setLevel(logging.DEBUG)
 
+# TODO rework for crypto
 
 class TransactionID(object):
 

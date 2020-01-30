@@ -11,7 +11,8 @@ _logger.setLevel(logging.DEBUG)
 
 class Policy(object):
 
-    def _build_principal(self, identity):
+    @staticmethod
+    def _build_principal(identity):
         if 'role' not in identity:
             raise Exception('NOT IMPLEMENTED')
 
@@ -43,7 +44,8 @@ class Policy(object):
 
         return newPrincipal
 
-    def _get_policy(self, policy):
+    @staticmethod
+    def _get_policy(policy):
         type = list(policy.keys())[0]
         # signed-by case
         if type == 'signed-by':
@@ -58,7 +60,7 @@ class Policy(object):
             nOutOf.n = n
             subs = []
             for sub in policy[type]:
-                subPolicy = self._get_policy(sub)
+                subPolicy = Policy._get_policy(sub)
                 subs.append(subPolicy)
 
             nOutOf.rules.extend(subs)
@@ -68,7 +70,8 @@ class Policy(object):
 
             return nOf
 
-    def _check_policy(self, policy):
+    @staticmethod
+    def _check_policy(policy):
         if not policy:
             raise Exception('Missing Required Param "policy"')
 
@@ -88,17 +91,17 @@ class Policy(object):
                             ' "policy" property')
 
     @staticmethod
-    def _build_policy(self, policy, msps=None, returnProto=False):
+    def _build_policy(policy, msps=None, returnProto=False):
         proto_signature_policy_envelope = \
             policies_pb2.SignaturePolicyEnvelope()
 
         if policy:
-            self._check_policy(policy)
+            Policy._check_policy(policy)
             proto_signature_policy_envelope.version = 0
             proto_signature_policy_envelope.rule.CopyFrom(
-                self._get_policy(policy['policy']))
+                Policy._get_policy(policy['policy']))
             proto_signature_policy_envelope.identities.extend(
-                [self._build_principal(x) for x in policy['identities']])
+                [Policy._build_principal(x) for x in policy['identities']])
         else:
             # TODO need to support MSPManager
             # no policy was passed in, construct a 'Signed By any member
