@@ -1,5 +1,6 @@
 from hfc.util.crypto.crypto import ecies
 from hfc.util.keyvaluestore import FileKeyValueStore
+from hfc.util.utils import getConfigSetting, setConfigSetting
 
 
 class BaseClient(object):
@@ -12,8 +13,8 @@ class BaseClient(object):
         return ecies() # TODO review
 
     @staticmethod
-    def newCryptoKeyStore(KVSImplClass, opts):
-        raise Exception('Not yet implemented') # TODO rework
+    def newCryptoKeyStore(KVSImplClass, opts=None):
+        raise Exception('Not yet implemented')  # TODO rework
 
     @staticmethod
     def newDefaultKeyValueStore(options):
@@ -37,21 +38,21 @@ class BaseClient(object):
 
         # TODO how to set logger globally
 
-    @staticmethod
-    def getLogger(name):
-        return getLogger(name) # TODO
+    # @staticmethod
+    # def getLogger(name):
+    #     return getLogger(name) # TODO
 
     @staticmethod
     def getConfigSetting(name, default_value=None):
-        return getConfigSetting(name, default_value) # TODO
+        return getConfigSetting(name, default_value)
 
     @staticmethod
     def setConfigSetting(name, value):
         return setConfigSetting(name, value)  # TODO
 
-    @staticmethod
-    def addConfigFile(path):
-        addConfigFile(path)  # TODO
+    # @staticmethod
+    # def addConfigFile(path):
+    #     addConfigFile(path)  # TODO
 
     def setCryptoSuite(self, cryptoSuite):
         self._cryptoSuite = cryptoSuite
@@ -59,6 +60,6 @@ class BaseClient(object):
     def getCryptoSuite(self):
         return self._cryptoSuite
 
-    @staticmethod
-    def normalizeX509(raw):
-        normalizeX509(raw)  # TODO
+    # @staticmethod
+    # def normalizeX509(raw):
+    #     normalizeX509(raw)  # TODO

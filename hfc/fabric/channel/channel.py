@@ -555,7 +555,7 @@ class Channel(object):
             common_pb2.HeaderType.Value('DELIVER_SEEK_INFO'),
             self._name,
             tx_id.transactionID,
-            self._initial_epoch, # TODO check if tx_context.epoch, is better,
+            0,
             None,
             current_timestamp(),
             self._clientContext.getClientCertHash()
@@ -681,7 +681,7 @@ class Channel(object):
             if 'connectFailed' in response:
                 _logger.error(f'Unable to get discovery results from peer {target_peer.url}')
                 target_peer.close()
- 
+
             raise Exception('Discovery has failed to return results')
 
     def _processDiscoveryChaincodeResults(self, q_chaincodes):
@@ -910,9 +910,9 @@ class Channel(object):
             caroots = caroots + msp['tls_root_certs']
         if 'tls_intermediate_certs' in msp and msp['tls_intermediate_certs']:
             caroots = caroots + msp['tls_intermediate_certs']
-        
+
         return caroots
-    
+
     def _merge_hints(self, endorsement_hints):
         method = '_merge_hints'
         _logger.debug(f'{method} - start')
@@ -1076,7 +1076,7 @@ class Channel(object):
             common_pb2.HeaderType.Value('DELIVER_SEEK_INFO'),
             self._name,
             tx_id.transactionID,
-            self._initial_epoch,  # TODO check if tx_context.epoch, is better,
+            0,
             None,
             current_timestamp(),
             self._clientContext.getClientCertHash()  # TODO
@@ -1115,7 +1115,7 @@ class Channel(object):
                 common_pb2.HeaderType.Value('DELIVER_SEEK_INFO'),
                 self._name,
                 tx_id.transactionID,
-                self._initial_epoch,  # TODO check if tx_context.epoch, is better,
+                0,
                 None,
                 current_timestamp(),
                 self._clientContext.getClientCertHash()  # TODO
@@ -1475,7 +1475,7 @@ class Channel(object):
             proto_b('escc'),
             proto_b('vscc'),
         ]
- 
+
         if 'endorsement-policy' in request:
             lcccSpec_args[3] = self._buildEndorsementPolicy(request['endorsement-policy'])
 

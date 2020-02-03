@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 
 import aiogrpc
 
-from hfc.util.utils import pem_to_der
+from hfc.util.utils import pem_to_der, getConfigSetting
 
 MAX_SEND = 'grpc.max_send_message_length'
 MAX_RECEIVE = 'grpc.max_receive_message_length'
@@ -42,6 +42,7 @@ class Endpoint(object):
 
     def isTLS(self):
         return self.protocol == 'grpcs'
+
 
 class Remote(object):
 
@@ -110,15 +111,21 @@ class Remote(object):
             split = url.split('//')
             self._name = split[1]
 
-        if checkIntegerConfig(opts, 'request-timeout'): # TODO
-            self._request_timeout = opts['request-timeout']
+        if 'request-timeout' in opts:
+            if isinstance(opts['request-timeout'], int):
+                self._request_timeout = opts['request-timeout']
+            else:
+                raise Exception(f"Expect an integer value of request-timeout, found {type(opts['request-timeout'])}")
         else:
             self._request_timeout = getConfigSetting('request-timeout', 30000)  # default 30 seconds
 
-        if checkIntegerConfig(opts, 'grpc-wait-for-ready-timeout'):  # TODO
-            self._grpc_wait_for_ready_timeout = opts['grpc-wait-for-ready-timeout']
+        if 'grpc-wait-for-ready-timeout' in opts:
+            if isinstance(opts['grpc-wait-for-ready-timeout'], int):
+                self._grpc_wait_for_ready_timeout = opts['grpc-wait-for-ready-timeout']
+            else:
+                raise Exception(f"Expect an integer value of grpc-wait-for-ready-timeout, found {type(opts['grpc-wait-for-ready-timeout'])}")
         else:
-            self._grpc_wait_for_ready_timeout = getConfigSetting('grpc-wait-for-ready-timeout', 3000)  # default 3 seconds
+            self._grpc_wait_for_ready_timeout = getConfigSetting('request-timeout', 3000)  # default 3 seconds
 
         _logger.debug(f' ** Remote instance url: {self._url}, name: {self._name}, options loaded are:: {self._options}')
 

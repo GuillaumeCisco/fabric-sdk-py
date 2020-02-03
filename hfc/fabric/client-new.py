@@ -3,9 +3,13 @@ import logging
 import json
 import re
 import os
+from _sha256 import sha256
 
 from cryptography.hazmat.primitives import serialization
 from yaml import load
+
+from hfc.fabric.package import Package
+
 try:
     from yaml import CLoader as Loader, CDumper as Dumper
 except ImportError:
@@ -19,14 +23,14 @@ from hfc.fabric.peer import Peer
 from hfc.fabric.transaction.transaction_id import TransactionID
 from hfc.fabric.user import User
 from hfc.protos.common import common_pb2, configtx_pb2
-from hfc.protos.peer import query_pb2
+from hfc.protos.peer import query_pb2, chaincode_pb2
 from hfc.fabric.block_decoder import decode_config_envelope
 from hfc.protos.utils import create_envelope
 from hfc.util import utils
 
 
-from hfc.util.utils import proto_b, build_channel_header, build_header, build_proposal, sign_proposal,\
-    send_peers_proposal
+from hfc.util.utils import proto_b, build_channel_header, build_header, build_proposal, sign_proposal, \
+    send_peers_proposal, proto_str, newCryptoSuite, pem_to_der
 
 from ..fabric_ca.caservice import ca_service
 
@@ -101,7 +105,7 @@ class Client(BaseClient):
         method = 'buildConnectionOptions'
         _logger.debug(f"{method} - start")
 
-        return_options = Client.getConfigSetting('connection-options').copy() # TODO meybe deep copy
+        return_options = Client.getConfigSetting('connection-options').copy() # TODO maybe deep copy
         return_options.update(self._connection_options)
         return_options.update(self._getLegacyOptions())
         return_options.update(options)
@@ -120,14 +124,14 @@ class Client(BaseClient):
 
         result = {}
 
-        if not getConfigSetting(MAX_RECEIVE): # TODO
-            result.update({MAX_RECEIVE: getConfigSetting(MAX_RECEIVE)})
-        if not getConfigSetting(MAX_RECEIVE_V10): # TODO
-            result.update({MAX_RECEIVE: getConfigSetting(MAX_RECEIVE_V10)})
-        if not getConfigSetting(MAX_SEND): # TODO
-            result.update({MAX_SEND: getConfigSetting(MAX_SEND)})
-        if not getConfigSetting(MAX_SEND_V10): # TODO
-            result.update({MAX_SEND: getConfigSetting(MAX_SEND_V10)})
+        if not Client.getConfigSetting(MAX_RECEIVE):
+            result.update({MAX_RECEIVE: Client.getConfigSetting(MAX_RECEIVE)})
+        if not Client.getConfigSetting(MAX_RECEIVE_V10):
+            result.update({MAX_RECEIVE: Client.getConfigSetting(MAX_RECEIVE_V10)})
+        if not Client.getConfigSetting(MAX_SEND):
+            result.update({MAX_SEND: Client.getConfigSetting(MAX_SEND)})
+        if not Client.getConfigSetting(MAX_SEND_V10):
+            result.update({MAX_SEND: Client.getConfigSetting(MAX_SEND_V10)})
 
         if len(result.keys()) > 0:
             _logger.warning(LEGACY_WARN_MESSAGE)
@@ -177,7 +181,7 @@ class Client(BaseClient):
             raise Exception(errorMessage)
         else:
             _logger.debug(errorMessage)
- 
+
     def newPeer(self, url, opts):
         return Peer(url, self.buildConnectionOptions(opts))
 
@@ -435,7 +439,7 @@ class Client(BaseClient):
 
         if not request or 'target' not in request or request['target'] is None:
             raise Exception('Target Peer is required')
- 
+
         targets = self.getTargetPeers(request['target'])
         if not targets or len(targets) == 0:
             raise Exception('Target Peer not found')
@@ -563,26 +567,22 @@ class Client(BaseClient):
             cdsBytes = None
             _logger.debug('installChaincode - in dev mode, refusing to package chaincode')
         else:
-            cdsPkg = await Package.fromDirectory({  # TODO
+            cdsPkg = Package.fromDirectory({
                 'name': request['chaincodeId'],
                 'version': request['chaincodeVersion'],
                 'path': request['chaincodePath'],
                 'type': request['chaincodeType'],
                 'metadataPath': request['metadataPath']
             })
-            cdsBytes = await cdsPkg.SerializeToString()
+            cdsBytes = cdsPkg.SerializeToString()
             _logger.debug(f'installChaincode - built chaincode package ({cdsBytes.length} bytes)')
 
         # TODO add ESCC/VSCC info here ??????
-        lcccSpec = {
-            'type': request['chaincodeType'],
-            'chaincode_id': {
-                'name': 'lscc'
-            },
-            'input': {
-                'args': proto_b('install') + cdsBytes
-            }
-        }
+
+        lcccSpec = chaincode_pb2.ChaincodeInvocationSpec()
+        lcccSpec.chaincode_spec.type = chaincode_pb2.ChaincodeSpec.Type.Value(proto_str(request['chaincodeType']))
+        lcccSpec.chaincode_spec.chaincode_id.name = proto_str("lscc")
+        lcccSpec.chaincode_spec.input.args.extend([proto_b('install'), cdsBytes])
 
         tx_id = request['txId']
         if not tx_id:
@@ -622,16 +622,6 @@ class Client(BaseClient):
             raise Exception('No credentialStore settings found')
 
     def setStateStore(self, keyValueStore):
-        err = ''
-
-        methods = getClassMethods(api.KeyValueStore) # TODO
-        for m in methods:
-            if not hasattr(keyValueStore[m], '__call__'):
-                err += f'{m} ()'
-
-        if err != '':
-            raise Exception(f'The "keyValueStore" parameter must be an object that implements the following methods, which are missing: {err}')
-
         self._stateStore = keyValueStore
         # userContext invalid on state store change, set to null
         self._userContext = None
@@ -869,8 +859,8 @@ class Client(BaseClient):
             raise Exception('Client.createUser parameter \'opts cryptoContent\' is required.')
 
         if self.getCryptoSuite() is None:
-            _logger.debug('cryptoSuite is null, creating default cryptoSuite and cryptoKeyStore')
-            self.setCryptoSuite(newCryptoSuite()) # TODO
+            _logger.debug('cryptoSuite is None, creating default cryptoSuite and cryptoKeyStore')
+            self.setCryptoSuite(newCryptoSuite())
             self.getCryptoSuite().setCryptoKeyStore(Client.newCryptoKeyStore()) # This is impossible
         else:
             if self.getCryptoSuite()._cryptoKeyStore:
@@ -970,8 +960,9 @@ class Client(BaseClient):
 
         if 'clientCert' in self._tls_mutual and self._tls_mutual['clientCert']:
             _logger.debug(f"{method} - using clientCert {self._tls_mutual['clienCert']}")
-            der_cert = pemToDER(self._tls_mutual['clientCert']) # TODO use old sdk
-            self._tls_mutual['clientCertHash'] = computeHash(der_cert)
+
+            b64der = pem_to_der(self._tls_mutual['clientCert'])
+            self._tls_mutual['clientCertHash'] = sha256(b64der).digest() # TODO work with different hash
         else:
             _logger.debug(f'{method} no tls client cert')
 
@@ -1012,9 +1003,9 @@ def _getNetworkConfig(loadConfig, client):
             raise Exception('common connection profile has an unknown "version"')
 
         # TODO
-        network_config = NetworkConfig(network_data, client, network_config_loc)
+        # network_config = NetworkConfig(network_data, client, network_config_loc)
     except Exception as e:
         raise Exception(f'Invalid common connection profile due to {str(e)}')
 
-    return network_config
+    # return network_config
 

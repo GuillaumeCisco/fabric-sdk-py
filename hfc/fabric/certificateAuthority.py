@@ -1,55 +1,75 @@
-# Copyright. All Rights Reserved.
-#
-# SPDX-License-Identifier: Apache-2.0
-
 import logging
 
 
-_logger = logging.getLogger(__name__ + ".certificateAuthority")
+_logger = logging.getLogger(__name__)
 
-
+# TODO rework with real method name
 class certificateAuthority(object):
-    """ An organization in the network.
 
-    It contains several members.
-    """
+    def __init__(self, name, caname, url, connection_options, tlsCACerts, registrar):
 
-    def __init__(self, name='ca'):
-        """
-        :param name: Name of the organization
-        """
+        _logger.debug('CertificateAuthority.const')
+
+        if not name:
+            raise Exception('Missing name parameter')
+
+        if not url:
+            raise Exception('Missing url parameter')
+
         self._name = name
-        self._url = None
-        self._grpc_options = dict()
-        self._tlsCACerts = dict()
-        self._registrar = []
 
-    def init_with_bundle(self, info):
-        """
-        Init the peer with given info dict
-        :param info: Dict including all info, e.g.,
-        :return: True or False
-        """
-        if 'url' in info:
-            self._url = info['url']
-        if 'grpc_options' in info:
-            self._grpc_options = info['grpc_options']
-        if 'tlsCACerts' in info:
-            self._tlsCACerts = info['tlsCACerts']
-        if 'registrar' in info:
-            self._registrar = info['registrar']
-        return True
+        if caname:
+            self._caname = caname
+        else:
+            self._caname = name
 
+        self._url = url
+        self._connection_options = connection_options
+        self._tlsCACerts = tlsCACerts
+        self._registrar = registrar
 
-def create_ca(name, info):
-    """ Factory method to construct a ca instance
+        self.fabricCAServices = None
 
-    Args:
-        name: Name of the ca
-        info: Info dict for initialization
+    @property
+    def name(self):
+        return self._name
 
-    Returns: an organization instance
-    """
-    ca = certificateAuthority(name=name)
-    ca.init_with_bundle(info)
-    return ca
+    @property
+    def caname(self):
+        return self._caname
+
+    @property
+    def tlsCACerts(self):
+        return self._tlsCACerts
+
+    @property
+    def registrar(self):
+        return self._registrar
+
+    @property
+    def fabricCAServices(self):
+        return self.fabricCAServices
+
+    def register(self, req, registrar):
+        return self.fabricCAServices.register(req, registrar)
+
+    def enroll(self, req):
+        return self.fabricCAServices.enroll(req)
+
+    def reenroll(self, currentUser, attr_reqs):
+        return self.fabricCAServices.reenroll(currentUser, attr_reqs)
+
+    def revoke(self, request, registrar):
+        return self.fabricCAServices.revoke(request, registrar)
+
+    def generateCRL(self, request, registrar):
+        return self.fabricCAServices.generateCRL(request, registrar)
+
+    def newCertificateService(self):
+        return self.fabricCAServices.newCertificateService()
+
+    def newIdentityService(self):
+        return self.fabricCAServices.newIdentityService()
+
+    def newAffiliationService(self):
+        return self.fabricCAServices.newAffiliationService()
