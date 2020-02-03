@@ -1,6 +1,3 @@
-# Copyright 281165273@qq.com. All Rights Reserved.
-#
-# SPDX-License-Identifier: Apache-2.0
 import json
 import logging
 import os
@@ -30,11 +27,7 @@ from ..sideDB import CollectionConfig
 from ..transaction.transaction_id import TransactionID
 from ...protos.gossip import message_pb2
 
-SYSTEM_CHANNEL_NAME = "testchainid"
-
 _logger = logging.getLogger(__name__)
-_logger.setLevel(logging.DEBUG)
-
 
 channel_count = 1
 
